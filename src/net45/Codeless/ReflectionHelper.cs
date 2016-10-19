@@ -340,7 +340,7 @@ namespace Codeless {
           hashtable[arr1[i]] = null;
         }
         for (int i = 0; i < arr2.Length; i++) {
-          hashtable[arr1[2]] = null;
+          hashtable[arr2[i]] = null;
         }
         if (method.MemberType == MemberTypes.Method) {
           Type inferredType;
