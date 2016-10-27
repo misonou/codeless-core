@@ -173,7 +173,12 @@ namespace Codeless {
       }
       if (!other.IsGenericType) {
         if (other.IsInterface) {
-          return type.GetInterface(other.Namespace + '.' + other.Name) != null;
+          foreach (Type interfaceType in type.GetInterfaces()) {
+            if (interfaceType == other) {
+              return true;
+            }
+          }
+          return false;
         }
         return type.IsSubclassOf(other);
       }
