@@ -167,6 +167,24 @@
             <param name="selector">An delegate to select the arent node of a given node.</param>
             <returns>An enumerable which enumerates all ancestor nodes of the specified node.</returns>
         </member>
+        <member name="M:Codeless.EnumerableHelper.AncestorsAndSelf``1(``0,System.Func{``0,``0})">
+            <summary>
+            Selects all ancestor objects including the input object in a tree-like data structure.
+            </summary>
+            <typeparam name="T">Type of objects to select.</typeparam>
+            <param name="source">An object representing a node in a tree-like data structure.</param>
+            <param name="selector">An delegate to select the arent node of a given node.</param>
+            <returns>An enumerable which enumerates all ancestor nodes of the specified node.</returns>
+        </member>
+        <member name="M:Codeless.EnumerableHelper.ForEach``1(System.Collections.Generic.IEnumerable{``0},System.Action{``0})">
+            <summary>
+            Iterate through an enumerable and performs action on each element.
+            </summary>
+            <typeparam name="T">Type of elements to iterate through.</typeparam>
+            <param name="source">An enumerable which enumerates elements.</param>
+            <param name="action">A delegte to execute on each enumerated element.</param>
+            <returns></returns>
+        </member>
         <member name="T:Codeless.IniConfigurationFormat">
             <summary>
             Specifies behaviors when parsing from or converting to an INI-formatted string.
