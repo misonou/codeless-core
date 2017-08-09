@@ -10,7 +10,7 @@ namespace System.Reflection {
     }
 
     public static IEnumerable<T> GetCustomAttributes<T>(this MemberInfo memberInfo, bool inherit) where T : Attribute {
-      return (T[])memberInfo.GetCustomAttributes(typeof(T), inherit);
+      return memberInfo.GetCustomAttributes(typeof(T), inherit).OfType<T>();
     }
 
     public static T GetCustomAttribute<T>(this Assembly assembly) where T : Attribute {
@@ -18,7 +18,7 @@ namespace System.Reflection {
     }
 
     public static IEnumerable<T> GetCustomAttributes<T>(this Assembly assembly) where T : Attribute {
-      return (T[])assembly.GetCustomAttributes(typeof(T), false);
+      return assembly.GetCustomAttributes(typeof(T), false).OfType<T>();
     }
   }
 }
