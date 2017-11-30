@@ -103,7 +103,20 @@ namespace Codeless {
     [DebuggerStepThrough]
     public static MethodInfo GetMethod(this Type type, string name, bool nonPublic, params Type[] parameterTypes) {
       CommonHelper.ConfirmNotNull(type, "type");
-      return type.GetMethod(name, ReflectionHelper.ALL & (nonPublic ? (BindingFlags)~0 : ~BindingFlags.NonPublic), null, parameterTypes, null);
+      BindingFlags flags = ReflectionHelper.ALL & (nonPublic ? (BindingFlags)~0 : ~BindingFlags.NonPublic);
+      MethodInfo mi = type.GetMethod(name, flags, null, parameterTypes, null);
+      if (mi != null) {
+        return mi;
+      }
+      foreach (MethodInfo m in type.GetMethods(flags)) {
+        if (m.Name == name) {
+          Type[] arr1, arr2, arr3;
+          if (ReflectionHelper.IsSignatureMatched(m, type, parameterTypes, null, out arr1, out arr2, out arr3)) {
+            return (MethodInfo)ReflectionHelper.MakeGenericMethod(m, arr1, arr2, arr3);
+          }
+        }
+      }
+      return null;
     }
 
     /// <summary>

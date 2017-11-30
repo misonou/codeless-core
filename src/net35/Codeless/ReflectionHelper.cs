@@ -306,20 +306,24 @@ namespace Codeless {
       if (member.ContainsGenericParameters) {
         Type[] arr1, arr2, arr3;
         if (IsSignatureMatched(member, target, parameters, returnType, out arr1, out arr2, out arr3)) {
-          if (member.DeclaringType.ContainsGenericParameters) {
-            Type inferredType = member.DeclaringType.MakeGenericType(arr1);
-            if (member.MemberType == MemberTypes.Constructor) {
-              member = inferredType.GetConstructor(ALL, null, arr3, null);
-            } else {
-              member = inferredType.GetMethod(member.Name, ALL, null, arr3, null);
-            }
-          }
-          if (member.ContainsGenericParameters) {
-            member = ((MethodInfo)member).MakeGenericMethod(arr2);
-          }
-          return member;
+          return MakeGenericMethod(member, arr1, arr2, arr3);
         }
         throw new InvalidOperationException("Unable to infer usage from supplied arguments.");
+      }
+      return member;
+    }
+
+    internal static MethodBase MakeGenericMethod(MethodBase member, Type[] arr1, Type[] arr2, Type[] arr3) {
+      if (member.DeclaringType.ContainsGenericParameters) {
+        Type inferredType = member.DeclaringType.MakeGenericType(arr1);
+        if (member.MemberType == MemberTypes.Constructor) {
+          member = inferredType.GetConstructor(ALL, null, arr3, null);
+        } else {
+          member = inferredType.GetMethod(member.Name, ALL, null, arr3, null);
+        }
+      }
+      if (member.ContainsGenericParameters) {
+        member = ((MethodInfo)member).MakeGenericMethod(arr2);
       }
       return member;
     }
@@ -327,11 +331,25 @@ namespace Codeless {
     internal static bool IsSignatureMatched(MethodBase method, object target, object[] parameters, Type returnType, out Type[] arr1, out Type[] arr2, out Type[] arr3) {
       CommonHelper.ConfirmNotNull(method, "method");
       CommonHelper.ConfirmNotNull(parameters, "parameters");
+      Type targetType = null;
+      Type[] parameterTypes = new Type[parameters.Length];
+      if (target != null) {
+        targetType = target.GetType();
+      }
+      for (int i = 0; i < parameters.Length; i++) {
+        parameterTypes[i] = parameters[i] != null ? parameters[i].GetType() : null;
+      }
+      return IsSignatureMatched(method, targetType, parameterTypes, returnType, out arr1, out arr2, out arr3);
+    }
+
+    internal static bool IsSignatureMatched(MethodBase method, Type targetType, Type[] parameterTypes, Type returnType, out Type[] arr1, out Type[] arr2, out Type[] arr3) {
+      CommonHelper.ConfirmNotNull(method, "method");
+      CommonHelper.ConfirmNotNull(parameterTypes, "parameterTypes");
       arr3 = method.GetParameterTypes();
       arr1 = null;
       arr2 = null;
 
-      if (arr3.Length == parameters.Length) {
+      if (arr3.Length == parameterTypes.Length) {
         arr1 = method.DeclaringType.GetGenericArguments();
         arr2 = method.MemberType == MemberTypes.Constructor ? new Type[0] : method.GetGenericArguments();
 
@@ -344,7 +362,7 @@ namespace Codeless {
         }
         if (method.MemberType == MemberTypes.Method) {
           Type inferredType;
-          if (target != null && !IsTypeMatched(hashtable, arr2, ((MethodInfo)method).DeclaringType, target.GetType(), false, out inferredType)) {
+          if (targetType != null && !IsTypeMatched(hashtable, arr2, ((MethodInfo)method).DeclaringType, targetType, false, out inferredType)) {
             return false;
           }
           if (returnType != null && returnType != typeof(object) && !IsTypeMatched(hashtable, arr2, ((MethodInfo)method).ReturnType, returnType, true, out inferredType)) {
@@ -352,7 +370,7 @@ namespace Codeless {
           }
         }
         for (int i = 0; i < arr3.Length; i++) {
-          if (parameters[i] == null ? arr3[i].IsValueType : !IsTypeMatched(hashtable, arr2, arr3[i], parameters[i].GetType(), false, out arr3[i])) {
+          if (parameterTypes[i] == null ? arr3[i].IsValueType : !IsTypeMatched(hashtable, arr2, arr3[i], parameterTypes[i], false, out arr3[i])) {
             return false;
           }
         }
