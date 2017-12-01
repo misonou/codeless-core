@@ -275,8 +275,7 @@ namespace Codeless {
       throw new MissingMethodException(target.GetType().FullName, name);
     }
 
-    internal static Type InferGenericParameters(this Type type, object[] parameters, out ConstructorInfo inferredCtor) {
-      CommonHelper.ConfirmNotNull(type, "type");
+    private static Type InferGenericParameters(this Type type, object[] parameters, out ConstructorInfo inferredCtor) {
       foreach (ConstructorInfo ctor in type.GetConstructors(ALL)) {
         Type[] arr1, arr2, arr3;
         if (IsSignatureMatched(ctor, null, parameters, null, out arr1, out arr2, out arr3)) {
@@ -292,8 +291,7 @@ namespace Codeless {
       throw new InvalidOperationException("Unable to infer usage from supplied arguments.");
     }
 
-    internal static PropertyInfo InferGenericParameters(this PropertyInfo member, object target, object[] parameters, Type returnType) {
-      CommonHelper.ConfirmNotNull(member, "member");
+    private static PropertyInfo InferGenericParameters(this PropertyInfo member, object target, object[] parameters, Type returnType) {
       if (member.DeclaringType.IsGenericTypeDefinition) {
         MethodBase inferredMethod = member.GetAccessors(true)[0].InferGenericParameters(target, parameters, returnType);
         return inferredMethod.DeclaringType.GetProperty(member.Name, inferredMethod.GetParameterTypes());
@@ -301,8 +299,7 @@ namespace Codeless {
       return member;
     }
 
-    internal static MethodBase InferGenericParameters(this MethodBase member, object target, object[] parameters, Type returnType) {
-      CommonHelper.ConfirmNotNull(member, "member");
+    private static MethodBase InferGenericParameters(this MethodBase member, object target, object[] parameters, Type returnType) {
       if (member.ContainsGenericParameters) {
         Type[] arr1, arr2, arr3;
         if (IsSignatureMatched(member, target, parameters, returnType, out arr1, out arr2, out arr3)) {
@@ -313,110 +310,160 @@ namespace Codeless {
       return member;
     }
 
-    internal static MethodBase MakeGenericMethod(MethodBase member, Type[] arr1, Type[] arr2, Type[] arr3) {
+    internal static MethodBase MakeGenericMethod(MethodBase member, Type[] typeGenericArguments, Type[] methodGenericArguments, Type[] parameterTypes) {
       if (member.DeclaringType.ContainsGenericParameters) {
-        Type inferredType = member.DeclaringType.MakeGenericType(arr1);
+        Type inferredType = member.DeclaringType.MakeGenericType(typeGenericArguments);
         if (member.MemberType == MemberTypes.Constructor) {
-          member = inferredType.GetConstructor(ALL, null, arr3, null);
+          member = inferredType.GetConstructor(ALL, null, parameterTypes, null);
         } else {
-          member = inferredType.GetMethod(member.Name, ALL, null, arr3, null);
+          member = inferredType.GetMethod(member.Name, ALL, null, parameterTypes, null);
         }
       }
       if (member.ContainsGenericParameters) {
-        member = ((MethodInfo)member).MakeGenericMethod(arr2);
+        member = ((MethodInfo)member).MakeGenericMethod(methodGenericArguments);
       }
       return member;
     }
 
-    internal static bool IsSignatureMatched(MethodBase method, object target, object[] parameters, Type returnType, out Type[] arr1, out Type[] arr2, out Type[] arr3) {
-      CommonHelper.ConfirmNotNull(method, "method");
-      CommonHelper.ConfirmNotNull(parameters, "parameters");
+    private static bool IsSignatureMatched(MethodBase method, object target, object[] parameters, Type returnType, out Type[] typeGenericArguments, out Type[] methodGenericArguments, out Type[] parameterTypes) {
+      if (method.GetParameters().Length != parameters.Length) {
+        typeGenericArguments = methodGenericArguments = parameterTypes = null;
+        return false;
+      }
       Type targetType = null;
-      Type[] parameterTypes = new Type[parameters.Length];
+      parameterTypes = new Type[parameters.Length];
       if (target != null) {
         targetType = target.GetType();
       }
       for (int i = 0; i < parameters.Length; i++) {
         parameterTypes[i] = parameters[i] != null ? parameters[i].GetType() : null;
       }
-      return IsSignatureMatched(method, targetType, parameterTypes, returnType, out arr1, out arr2, out arr3);
+      return IsSignatureMatched(method, targetType, parameterTypes, returnType, out typeGenericArguments, out methodGenericArguments, out parameterTypes);
     }
 
-    internal static bool IsSignatureMatched(MethodBase method, Type targetType, Type[] parameterTypes, Type returnType, out Type[] arr1, out Type[] arr2, out Type[] arr3) {
+    internal static bool IsSignatureMatched(MethodBase method, Type targetType, Type[] parameterTypes, Type returnType, out Type[] typeGenericArguments, out Type[] methodGenericArguments, out Type[] actualParameterTypes) {
       CommonHelper.ConfirmNotNull(method, "method");
       CommonHelper.ConfirmNotNull(parameterTypes, "parameterTypes");
-      arr3 = method.GetParameterTypes();
-      arr1 = null;
-      arr2 = null;
+      bool hasTypeArguments = method.ContainsGenericParameters;
+      Type dummy;
 
-      if (arr3.Length == parameterTypes.Length) {
-        arr1 = method.DeclaringType.GetGenericArguments();
-        arr2 = method.MemberType == MemberTypes.Constructor ? new Type[0] : method.GetGenericArguments();
+      actualParameterTypes = method.GetParameterTypes();
 
-        Hashtable hashtable = new Hashtable(arr1.Length + arr2.Length);
-        for (int i = 0; i < arr1.Length; i++) {
-          hashtable[arr1[i]] = null;
-        }
-        for (int i = 0; i < arr2.Length; i++) {
-          hashtable[arr2[i]] = null;
-        }
-        if (method.MemberType == MemberTypes.Method) {
-          Type inferredType;
-          if (targetType != null && !IsTypeMatched(hashtable, arr2, ((MethodInfo)method).DeclaringType, targetType, false, out inferredType)) {
-            return false;
-          }
-          if (returnType != null && returnType != typeof(object) && !IsTypeMatched(hashtable, arr2, ((MethodInfo)method).ReturnType, returnType, true, out inferredType)) {
-            return false;
-          }
-        }
-        for (int i = 0; i < arr3.Length; i++) {
-          if (parameterTypes[i] == null ? arr3[i].IsValueType : !IsTypeMatched(hashtable, arr2, arr3[i], parameterTypes[i], false, out arr3[i])) {
-            return false;
-          }
-        }
-        for (int i = 0; i < arr1.Length; i++) {
-          arr1[i] = (Type)hashtable[arr1[i]];
-        }
-        for (int i = 0; i < arr2.Length; i++) {
-          arr2[i] = (Type)hashtable[arr2[i]];
-        }
-        return true;
+      // trivial case where parameter count does not match
+      if (actualParameterTypes.Length != parameterTypes.Length) {
+        typeGenericArguments = methodGenericArguments = actualParameterTypes = null;
+        return false;
       }
+
+      Hashtable hashtable;
+      if (hasTypeArguments) {
+        typeGenericArguments = method.DeclaringType.GetGenericArguments();
+        methodGenericArguments = method.MemberType == MemberTypes.Constructor ? Type.EmptyTypes : method.GetGenericArguments();
+
+        // create a dictionary to map generic parameters and generic arguments
+        hashtable = new Hashtable(typeGenericArguments.Length + methodGenericArguments.Length);
+        for (int i = 0; i < typeGenericArguments.Length; i++) {
+          hashtable[typeGenericArguments[i]] = null;
+        }
+        for (int i = 0; i < methodGenericArguments.Length; i++) {
+          hashtable[methodGenericArguments[i]] = null;
+        }
+      } else {
+        typeGenericArguments = methodGenericArguments = Type.EmptyTypes;
+        hashtable = null;
+      }
+
+      if (method.MemberType == MemberTypes.Method) {
+        if (targetType != null && !IsTypeMatched(hashtable, methodGenericArguments, ((MethodInfo)method).DeclaringType, targetType, false, out dummy)) {
+          goto NotMatch;
+        }
+        if (returnType != null && returnType != typeof(object) && !IsTypeMatched(hashtable, methodGenericArguments, ((MethodInfo)method).ReturnType, returnType, true, out dummy)) {
+          goto NotMatch;
+        }
+      }
+      for (int i = 0; i < actualParameterTypes.Length; i++) {
+        if (parameterTypes[i] == null ? actualParameterTypes[i].IsValueType : !IsTypeMatched(hashtable, methodGenericArguments, actualParameterTypes[i], parameterTypes[i], false, out actualParameterTypes[i])) {
+          goto NotMatch;
+        }
+      }
+
+      if (hasTypeArguments) {
+        // map inferred generic arguments to out arrays
+        for (int i = 0; i < typeGenericArguments.Length; i++) {
+          typeGenericArguments[i] = (Type)hashtable[typeGenericArguments[i]];
+        }
+        for (int i = 0; i < methodGenericArguments.Length; i++) {
+          methodGenericArguments[i] = (Type)hashtable[methodGenericArguments[i]];
+        }
+      }
+      return true;
+
+      NotMatch:
+      typeGenericArguments = methodGenericArguments = actualParameterTypes = null;
       return false;
     }
 
-    private static bool IsTypeMatched(Hashtable hashtable, Type[] arr2, Type declaredType, Type actualType, bool contravariance, out Type inferredType) {
+    private static bool IsTypeMatched(Hashtable hashtable, Type[] methodGenericArguments, Type declaredType, Type actualType, bool contravariance, out Type actualParameterType) {
       if (declaredType.ContainsGenericParameters) {
-        return MapGenericArguments(hashtable, arr2, declaredType, actualType, out inferredType);
+        return MapGenericArguments(hashtable, methodGenericArguments, declaredType, actualType, out actualParameterType);
       }
-      inferredType = declaredType;
+      actualParameterType = declaredType;
       return contravariance ? declaredType.IsOf(actualType) : actualType.IsOf(declaredType);
     }
 
-    private static bool MapGenericArguments(Hashtable hashtable, Type[] arr2, Type declaredType, Type actualType, out Type inferredType) {
+    private static bool MapGenericArguments(Hashtable hashtable, Type[] methodGenericArguments, Type declaredType, Type actualType, out Type actualParameterType) {
+      // case where declared type is a generic parameter e.g. T
       if (declaredType.IsGenericParameter) {
-        inferredType = (Type)hashtable[declaredType];
-        if (inferredType == null) {
+        // here we infer generic parameters of both method and its declaring type
+        // then return the parameter type as if the generic type is constructed with generic arguments
+        actualParameterType = (Type)hashtable[declaredType];
+
+        // if this generic parameter is not inferred before
+        // we assume that this actual type in the same position infers this generic parameter
+        if (actualParameterType == null) {
           hashtable[declaredType] = actualType;
-          inferredType = Array.IndexOf(arr2, declaredType) >= 0 ? declaredType : actualType;
+
+          // the method signature will still contains this T if the declared type T is a method generic parameter
+          // otherwise the method signature will contains the inferred type <actualType>
+          // after generic type is constructed with generic arguments
+          actualParameterType = Array.IndexOf(methodGenericArguments, declaredType) >= 0 ? declaredType : actualType;
           return true;
         }
-        if (actualType.IsOf(inferredType)) {
-          inferredType = Array.IndexOf(arr2, declaredType) >= 0 ? declaredType : actualType;
+
+        // if this generic parameter has been inferred before
+        // and the actual type is compatible to the inferred type
+        if (actualType.IsOf(actualParameterType)) {
+          actualParameterType = Array.IndexOf(methodGenericArguments, declaredType) >= 0 ? declaredType : actualType;
           return true;
         }
         return false;
       }
-      Type[] arr1 = declaredType.GetGenericArguments();
-      Type[] arr3;
-      if (actualType.IsOf(declaredType.GetGenericTypeDefinition(), out arr3)) {
-        for (int i = arr1.Length - 1; i >= 0; i--) {
-          MapGenericArguments(hashtable, arr2, arr1[i], arr3[i], out arr3[i]);
+
+      // case where declared type contains generic arguments e.g. ClassOrInterface<T>
+      if (declaredType.ContainsGenericParameters) {
+        Type[] srcTypeArguments = declaredType.GetGenericArguments();
+        Type[] dstTypeArguments;
+
+        // if the actual type is compatible to the declared type e.g. SubClassOrInterface : ClassOrInterface<T>
+        // recursively map all of the generic arguments
+        // and construct a new type from <declaredType> that will eventually appears on the method signature
+        if (actualType.IsOf(declaredType.GetGenericTypeDefinition(), out dstTypeArguments)) {
+          for (int i = srcTypeArguments.Length - 1; i >= 0; i--) {
+            MapGenericArguments(hashtable, methodGenericArguments, srcTypeArguments[i], dstTypeArguments[i], out dstTypeArguments[i]);
+          }
+          actualParameterType = declaredType.GetGenericTypeDefinition().MakeGenericType(dstTypeArguments);
+          return true;
         }
-        inferredType = declaredType.GetGenericTypeDefinition().MakeGenericType(arr3);
+        actualParameterType = null;
+        return false;
+      }
+
+      // simple case there is no generic parameters to infer
+      if (actualType.IsOf(declaredType)) {
+        actualParameterType = declaredType;
         return true;
       }
-      inferredType = null;
+      actualParameterType = null;
       return false;
     }
   }
